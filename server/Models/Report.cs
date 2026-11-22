@@ -4,6 +4,9 @@ namespace CivicConnect.Api.Models;
 
 public class Report
 {
+    public ICollection<ReportStatusHistory> StatusHistory { get; set; }
+    = new List<ReportStatusHistory>();
+
     public int Id { get; set; }
 
     [Required]

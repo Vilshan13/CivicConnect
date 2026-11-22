@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261122142912_InitialCreate";
+    public override string LastMigrationId => "20261122144451_AddReportStatusHistory";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -76,6 +76,56 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasKey("Id");
 
                 b.ToTable("Reports");
+            });
+
+        modelBuilder.Entity("CivicConnect.Api.Models.ReportStatusHistory", b =>
+            {
+                var id = b.Property<int>("Id")
+                    .ValueGeneratedOnAdd()
+                    .HasColumnType("integer");
+
+                NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(id);
+
+                b.Property<DateTime>("ChangedAtUtc")
+                    .HasColumnType("timestamp with time zone");
+
+                b.Property<string>("NewStatus")
+                    .IsRequired()
+                    .HasMaxLength(30)
+                    .HasColumnType("character varying(30)");
+
+                b.Property<string>("Note")
+                    .HasMaxLength(500)
+                    .HasColumnType("character varying(500)");
+
+                b.Property<string>("PreviousStatus")
+                    .HasMaxLength(30)
+                    .HasColumnType("character varying(30)");
+
+                b.Property<int>("ReportId")
+                    .HasColumnType("integer");
+
+                b.HasKey("Id");
+
+                b.HasIndex("ReportId");
+
+                b.ToTable("ReportStatusHistories");
+            });
+
+        modelBuilder.Entity("CivicConnect.Api.Models.ReportStatusHistory", b =>
+            {
+                b.HasOne("CivicConnect.Api.Models.Report", "Report")
+                    .WithMany("StatusHistory")
+                    .HasForeignKey("ReportId")
+                    .OnDelete(DeleteBehavior.Cascade)
+                    .IsRequired();
+
+                b.Navigation("Report");
+            });
+
+        modelBuilder.Entity("CivicConnect.Api.Models.Report", b =>
+            {
+                b.Navigation("StatusHistory");
             });
 #pragma warning restore 612, 618
     }
