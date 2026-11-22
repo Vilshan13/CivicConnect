@@ -6,6 +6,7 @@ dist/
 # .NET
 **/bin/
 **/obj/
+server/**/App_Data/
 *.user
 *.suo
 
