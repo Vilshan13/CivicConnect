@@ -26,6 +26,13 @@ The individual project will focus on one pilot area. It will include citizen acc
 
 Each milestone will be implemented and reviewed as a small change, then saved in a Git commit. The implementation details may be refined with supervisor approval as stated in the proposal.
 
-## Current state
+## Run locally
 
-Milestone 1 establishes the project scope and build sequence. The next step is to turn the proposal into concrete user stories and acceptance criteria before implementing the data model.
+Requirements: .NET 10 SDK, Node.js 20.19+ (or 22.12+), and Docker Compose.
+
+1. Start PostgreSQL with `docker compose up -d db`.
+2. Start the API from `server/CivicConnect.Api` with `dotnet run`.
+3. In another terminal, start the web app from `client` with `npm install` and `npm run dev`.
+4. Open the local address printed by Vite. The API uses `http://localhost:5080` by default.
+
+The current implementation is the first report submission and listing slice. Authentication, officer assignment, status history, administration, and notifications are planned follow-up milestones. Do not deploy this prototype publicly until those access controls and production settings are in place.
