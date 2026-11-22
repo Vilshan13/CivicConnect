@@ -1,0 +1,11 @@
+@CivicConnect.Api_HostAddress = http://localhost:5257
+
+GET {{CivicConnect.Api_HostAddress}}/openapi/v1.json
+Accept: application/json
+
+###
+
+GET {{CivicConnect.Api_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###
