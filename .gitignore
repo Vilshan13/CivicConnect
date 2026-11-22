@@ -1,0 +1,22 @@
+# Frontend
+node_modules/
+dist/
+.vite/
+
+# .NET
+**/bin/
+**/obj/
+*.user
+*.suo
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+appsettings.Local.json
+
+# Editors and OS files
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
