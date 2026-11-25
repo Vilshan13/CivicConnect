@@ -16,7 +16,7 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
     // If you encounter a merge conflict in the line below, it means you need to
     // discard one of the migration branches and recreate its migrations on top of
     // the other branch. See https://aka.ms/efcore-docs-migrations-conflicts for more info.
-    public override string LastMigrationId => "20261125131137_AddIdentityUsers";
+    public override string LastMigrationId => "20261125141237_LinkReportsToCitizens";
 
     protected override void BuildModel(ModelBuilder modelBuilder)
     {
@@ -109,6 +109,9 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .HasMaxLength(80)
                     .HasColumnType("character varying(80)");
 
+                b.Property<string>("CitizenId")
+                    .HasColumnType("text");
+
                 b.Property<DateTime>("CreatedAtUtc")
                     .HasColumnType("timestamp with time zone");
 
@@ -138,6 +141,8 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                     .HasColumnType("character varying(120)");
 
                 b.HasKey("Id");
+
+                b.HasIndex("CitizenId");
 
                 b.ToTable("Reports");
             });
@@ -306,6 +311,15 @@ partial class AppDbContextModelSnapshot : ModelSnapshot
                 b.HasKey("UserId", "LoginProvider", "Name");
 
                 b.ToTable("AspNetUserTokens");
+            });
+
+        modelBuilder.Entity("CivicConnect.Api.Models.Report", b =>
+            {
+                b.HasOne("CivicConnect.Api.Models.ApplicationUser", "Citizen")
+                    .WithMany()
+                    .HasForeignKey("CitizenId");
+
+                b.Navigation("Citizen");
             });
 
         modelBuilder.Entity("CivicConnect.Api.Models.ReportStatusHistory", b =>

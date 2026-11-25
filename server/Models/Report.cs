@@ -1,5 +1,5 @@
 using System.ComponentModel.DataAnnotations;
-
+using System.Text.Json.Serialization;
 namespace CivicConnect.Api.Models;
 
 public class Report
@@ -8,6 +8,10 @@ public class Report
     = new List<ReportStatusHistory>();
 
     public int Id { get; set; }
+    public string? CitizenId { get; set; }
+
+[JsonIgnore]
+public ApplicationUser? Citizen { get; set; }
 
     [Required]
     [MaxLength(120)]
