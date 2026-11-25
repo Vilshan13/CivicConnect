@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import AuthPanel from './AuthPanel'
+
 
 const emptyForm = {
   title: '',
@@ -20,17 +21,27 @@ function App() {
   const [error, setError] = useState('')
   const [session, setSession] = useState(null)
 
-  async function loadReports() {
-    const response = await fetch('/api/reports')
-    if (!response.ok) throw new Error('Could not load reports.')
-    setReports(await response.json())
-  }
+  const loadReports = useCallback(async () => {
+  if (!session?.accessToken) return
 
-  useEffect(() => {
-    loadReports()
-      .catch(() => setError('Could not connect to CivicConnect. Check that the API is running.'))
-      .finally(() => setLoading(false))
-  }, [])
+  const response = await fetch('/api/reports', {
+    headers: {
+      Authorization: `Bearer ${session.accessToken}`,
+    },
+  })
+
+  if (!response.ok) throw new Error('Could not load reports.')
+  setReports(await response.json())
+}, [session?.accessToken])
+
+ useEffect(() => {
+  if (!session?.accessToken) return
+
+  setLoading(true)
+  loadReports()
+    .catch(() => setError('Could not connect to CivicConnect. Check that the API is running.'))
+    .finally(() => setLoading(false))
+}, [loadReports, session?.accessToken])
 
   function updateField(event) {
     const { name, value } = event.target
@@ -52,7 +63,10 @@ function App() {
     try {
       const response = await fetch('/api/reports', {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+  'Content-Type': 'application/json',
+  Authorization: `Bearer ${session.accessToken}`,
+},
         body: JSON.stringify(report),
       })
 
