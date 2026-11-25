@@ -1,9 +1,10 @@
-using Microsoft.EntityFrameworkCore;
 using CivicConnect.Api.Models;
+using Microsoft.AspNetCore.Identity.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore;
 
 namespace CivicConnect.Api.Data;
 
-public class AppDbContext : DbContext
+public class AppDbContext : IdentityDbContext<ApplicationUser>
 {
     public DbSet<ReportStatusHistory> ReportStatusHistories { get; set; } = null!;
 

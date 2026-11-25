@@ -1,6 +1,7 @@
 using CivicConnect.Api.Models;
 using CivicConnect.Api.Data;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.AspNetCore.Identity;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -12,9 +13,81 @@ builder.Services.AddDbContext<AppDbContext>(options =>
     options.UseNpgsql(
         builder.Configuration.GetConnectionString("DefaultConnection")));
 
+builder.Services.AddAuthorization();
+
+builder.Services
+    .AddIdentityApiEndpoints<ApplicationUser>()
+    .AddRoles<IdentityRole>()
+    .AddEntityFrameworkStores<AppDbContext>();
+
 var app = builder.Build();
 
+app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
 
+app.MapPost("/api/auth/citizen-register",
+    async Task<IResult> (
+        RegisterCitizenRequest request,
+        UserManager<ApplicationUser> userManager,
+        RoleManager<IdentityRole> roleManager) =>
+{
+    if (string.IsNullOrWhiteSpace(request.Email) ||
+        string.IsNullOrWhiteSpace(request.Password))
+    {
+        return Results.BadRequest(new
+        {
+            message = "Email and password are required."
+        });
+    }
+
+    const string citizenRole = "Citizen";
+
+    if (!await roleManager.RoleExistsAsync(citizenRole))
+    {
+        var roleResult = await roleManager.CreateAsync(
+            new IdentityRole(citizenRole));
+
+        if (!roleResult.Succeeded)
+        {
+            return Results.BadRequest(roleResult.Errors);
+        }
+    }
+
+    var email = request.Email.Trim();
+
+    var user = new ApplicationUser
+    {
+        UserName = email,
+        Email = email
+    };
+
+    var createResult = await userManager.CreateAsync(
+        user,
+        request.Password);
+
+    if (!createResult.Succeeded)
+    {
+        return Results.BadRequest(createResult.Errors);
+    }
+
+    var assignRoleResult = await userManager.AddToRoleAsync(
+        user,
+        citizenRole);
+
+    if (!assignRoleResult.Succeeded)
+    {
+        await userManager.DeleteAsync(user);
+
+        return Results.Problem(
+            detail: "Could not assign the Citizen role.");
+    }
+
+    return Results.Ok(new
+    {
+        user.Id,
+        user.Email,
+        role = citizenRole
+    });
+});
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())

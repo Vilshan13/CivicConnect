@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import './App.css'
+import AuthPanel from './AuthPanel'
 
 const emptyForm = {
   title: '',
@@ -17,6 +18,7 @@ function App() {
   const [saving, setSaving] = useState(false)
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
+  const [session, setSession] = useState(null)
 
   async function loadReports() {
     const response = await fetch('/api/reports')
@@ -67,6 +69,7 @@ function App() {
     }
   }
 
+  if (!session) {
   return (
     <div className="app-shell">
       <header className="site-header">
@@ -74,7 +77,46 @@ function App() {
           <span className="brand-mark">C</span>
           <span>Civic<span className="brand-light">Connect</span></span>
         </a>
-        <span className="header-note"><span className="live-dot" /> Colombo District pilot</span>
+        <span className="header-note">
+          <span className="live-dot" /> Colombo District pilot
+        </span>
+      </header>
+
+      <main id="top" style={{ maxWidth: 480, paddingTop: 48 }}>
+        <section className="intro" style={{ padding: '16px 0 24px' }}>
+          <p className="eyebrow">Your community, connected</p>
+          <h1>Welcome to<br /><span>CivicConnect.</span></h1>
+          <p className="intro-copy">
+            Sign in or create a citizen account to continue.
+          </p>
+        </section>
+
+        <AuthPanel onAuthenticated={setSession} />
+      </main>
+
+      <footer className="site-footer">
+        <span>CivicConnect</span>
+        <span>Local issues, visible progress.</span>
+      </footer>
+    </div>
+  )
+}
+
+  return (
+    <div className="app-shell">
+      <header className="site-header">
+        <a className="brand" href="#top" aria-label="CivicConnect home">
+          <span className="brand-mark">C</span>
+          <span>Civic<span className="brand-light">Connect</span></span>
+        </a>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+  <span className="header-note">
+    <span className="live-dot" /> Signed in: {session.email}
+  </span>
+  <button type="button" onClick={() => setSession(null)}>
+    Sign out
+  </button>
+</div>
       </header>
 
       <main id="top">
