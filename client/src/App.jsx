@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from 'react'
 import './App.css'
 import AuthPanel from './AuthPanel'
+import LocationPicker from './LocationPicker'
 
 
 const emptyForm = {
@@ -184,8 +185,24 @@ function App() {
 
               <div className="location-heading">
                 <span className="location-icon" aria-hidden="true">⌖</span>
-                <div><strong>Pinpoint the location</strong><span>Enter coordinates for this first version.</span></div>
+                <div>
+                  <strong>Pinpoint the location</strong>
+                  <span>Click the map, or enter coordinates below.</span>
+                </div>
               </div>
+
+              <LocationPicker
+                latitude={form.latitude}
+                longitude={form.longitude}
+                onLocationSelect={(latitude, longitude) =>
+                  setForm((current) => ({
+                    ...current,
+                    latitude: latitude.toFixed(6),
+                    longitude: longitude.toFixed(6),
+                  }))
+                }
+              />
+
               <div className="field-row coordinates">
                 <label>
                   Latitude

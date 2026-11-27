@@ -311,3 +311,12 @@ textarea { resize: vertical; min-height: 104px; line-height: 1.55; }
   .field-row { gap: 9px; }
   .site-footer { min-height: 58px; }
 }
+
+.location-map {
+  width: 100%;
+  height: 300px;
+  border: 1px solid #dfe7e1;
+  border-radius: 12px;
+  overflow: hidden;
+  z-index: 0;
+}

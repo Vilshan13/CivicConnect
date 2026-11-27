@@ -2,6 +2,7 @@ using CivicConnect.Api.Models;
 using CivicConnect.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -53,32 +54,23 @@ app.MapPost("/api/auth/citizen-register",
     }
 
     var email = request.Email.Trim();
-
     var user = new ApplicationUser
     {
         UserName = email,
         Email = email
     };
 
-    var createResult = await userManager.CreateAsync(
-        user,
-        request.Password);
-
+    var createResult = await userManager.CreateAsync(user, request.Password);
     if (!createResult.Succeeded)
     {
         return Results.BadRequest(createResult.Errors);
     }
 
-    var assignRoleResult = await userManager.AddToRoleAsync(
-        user,
-        citizenRole);
-
-    if (!assignRoleResult.Succeeded)
+    var roleAssignment = await userManager.AddToRoleAsync(user, citizenRole);
+    if (!roleAssignment.Succeeded)
     {
         await userManager.DeleteAsync(user);
-
-        return Results.Problem(
-            detail: "Could not assign the Citizen role.");
+        return Results.Problem(detail: "Could not assign the Citizen role.");
     }
 
     return Results.Ok(new
@@ -89,29 +81,42 @@ app.MapPost("/api/auth/citizen-register",
     });
 });
 
-// Configure the HTTP request pipeline.
-if (app.Environment.IsDevelopment())
+app.MapGet("/api/reports", async Task<IResult> (
+    ClaimsPrincipal user,
+    AppDbContext db) =>
 {
-    app.MapOpenApi();
-}
+    var citizenId = user.FindFirstValue(ClaimTypes.NameIdentifier);
 
-app.UseHttpsRedirection();
+    if (string.IsNullOrWhiteSpace(citizenId))
+    {
+        return Results.Unauthorized();
+    }
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/api/reports", async (AppDbContext db) =>
-    await db.Reports
+    var reports = await db.Reports
+        .Where(report => report.CitizenId == citizenId)
         .OrderByDescending(report => report.CreatedAtUtc)
-        .ToListAsync());
+        .ToListAsync();
 
-        app.MapGet("/api/reports/{id:int}", async Task<IResult> (int id, AppDbContext db) =>
+    return Results.Ok(reports);
+})
+.RequireAuthorization(policy => policy.RequireRole("Citizen"));
+
+app.MapGet("/api/reports/{id:int}", async Task<IResult> (
+    int id,
+    ClaimsPrincipal user,
+    AppDbContext db) =>
 {
+    var citizenId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (string.IsNullOrWhiteSpace(citizenId))
+    {
+        return Results.Unauthorized();
+    }
+
     var report = await db.Reports
         .Include(report => report.StatusHistory)
-        .FirstOrDefaultAsync(report => report.Id == id);
+        .FirstOrDefaultAsync(report =>
+            report.Id == id && report.CitizenId == citizenId);
 
     if (report is null)
     {
@@ -119,9 +124,14 @@ app.MapGet("/api/reports", async (AppDbContext db) =>
     }
 
     return Results.Ok(report);
-});
+})
+.RequireAuthorization(policy => policy.RequireRole("Citizen"));
+
 app.MapPatch("/api/reports/{id:int}/status",
-    async Task<IResult> (int id, UpdateReportStatusRequest request, AppDbContext db) =>
+    async Task<IResult> (
+        int id,
+        UpdateReportStatusRequest request,
+        AppDbContext db) =>
 {
     var report = await db.Reports.FindAsync(id);
 
@@ -148,7 +158,10 @@ app.MapPatch("/api/reports/{id:int}/status",
 
     if (request.Note?.Length > 500)
     {
-        return Results.BadRequest(new { message = "Note must be 500 characters or fewer." });
+        return Results.BadRequest(new
+        {
+            message = "Note must be 500 characters or fewer."
+        });
     }
 
     var previousStatus = report.Status;
@@ -166,27 +179,44 @@ app.MapPatch("/api/reports/{id:int}/status",
     await db.SaveChangesAsync();
 
     return Results.Ok(report);
-});
-app.MapPost("/api/reports", async (Report report, AppDbContext db) =>
+})
+.RequireAuthorization(policy =>
+    policy.RequireRole("Officer", "Administrator"));
+
+app.MapPost("/api/reports", async Task<IResult> (
+    Report report,
+    ClaimsPrincipal user,
+    AppDbContext db) =>
 {
+    var citizenId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (string.IsNullOrWhiteSpace(citizenId))
+    {
+        return Results.Unauthorized();
+    }
+
     report.Id = 0;
+    report.CitizenId = citizenId;
     report.CreatedAtUtc = DateTime.UtcNow;
     report.Status = "Submitted";
+    report.StatusHistory.Clear();
 
     report.StatusHistory.Add(new ReportStatusHistory
-{
-    PreviousStatus = null,
-    NewStatus = report.Status,
-    Note = "Report submitted"
-});
+    {
+        PreviousStatus = null,
+        NewStatus = report.Status,
+        Note = "Report submitted"
+    });
 
     db.Reports.Add(report);
     await db.SaveChangesAsync();
 
     return Results.Created($"/api/reports/{report.Id}", report);
-});
+})
+.RequireAuthorization(policy => policy.RequireRole("Citizen"));
 
 app.Run();
+
 
 record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
 {
