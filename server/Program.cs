@@ -2,9 +2,14 @@ using CivicConnect.Api.Models;
 using CivicConnect.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.AspNetCore.Identity;
+using Microsoft.AspNetCore.Mvc;
 using System.Security.Claims;
 
 var builder = WebApplication.CreateBuilder(args);
+
+var webRootPath = builder.Environment.WebRootPath
+    ?? Path.Combine(builder.Environment.ContentRootPath, "wwwroot");
+Directory.CreateDirectory(Path.Combine(webRootPath, "uploads"));
 
 // Add services to the container.
 // Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
@@ -22,6 +27,7 @@ builder.Services
     .AddEntityFrameworkStores<AppDbContext>();
 
 var app = builder.Build();
+app.UseStaticFiles();
 
 app.MapGroup("/api/auth").MapIdentityApi<ApplicationUser>();
 
@@ -199,6 +205,7 @@ app.MapPost("/api/reports", async Task<IResult> (
     report.CitizenId = citizenId;
     report.CreatedAtUtc = DateTime.UtcNow;
     report.Status = "Submitted";
+    report.PhotoPath = null;
     report.StatusHistory.Clear();
 
     report.StatusHistory.Add(new ReportStatusHistory
@@ -214,6 +221,131 @@ app.MapPost("/api/reports", async Task<IResult> (
     return Results.Created($"/api/reports/{report.Id}", report);
 })
 .RequireAuthorization(policy => policy.RequireRole("Citizen"));
+
+app.MapPost("/api/reports/with-photo", async Task<IResult> (
+    [FromForm] CreateReportWithPhotoRequest request,
+    ClaimsPrincipal user,
+    AppDbContext db,
+    IWebHostEnvironment environment) =>
+{
+    var citizenId = user.FindFirstValue(ClaimTypes.NameIdentifier);
+
+    if (string.IsNullOrWhiteSpace(citizenId))
+    {
+        return Results.Unauthorized();
+    }
+
+    if (string.IsNullOrWhiteSpace(request.Title) || request.Title.Length > 120 ||
+        string.IsNullOrWhiteSpace(request.Description) || request.Description.Length > 2000 ||
+        string.IsNullOrWhiteSpace(request.Category) || request.Category.Length > 80 ||
+        string.IsNullOrWhiteSpace(request.AreaName) || request.AreaName.Length > 100 ||
+        !double.IsFinite(request.Latitude) || request.Latitude is < -90 or > 90 ||
+        !double.IsFinite(request.Longitude) || request.Longitude is < -180 or > 180)
+    {
+        return Results.BadRequest(new { message = "Check the report details and location." });
+    }
+
+    var photo = request.Photo;
+    if (photo is null || photo.Length == 0)
+    {
+        return Results.BadRequest(new { message = "Choose a photo to upload." });
+    }
+
+    const long maxPhotoSizeBytes = 5 * 1024 * 1024;
+    if (photo.Length > maxPhotoSizeBytes)
+    {
+        return Results.BadRequest(new { message = "The image must be 5 MB or smaller." });
+    }
+
+    var contentType = photo.ContentType.ToLowerInvariant();
+    var extension = contentType switch
+    {
+        "image/jpeg" => ".jpg",
+        "image/png" => ".png",
+        "image/webp" => ".webp",
+        _ => null
+    };
+
+    if (extension is null)
+    {
+        return Results.BadRequest(new { message = "Choose a JPG, PNG, or WebP image." });
+    }
+
+    var header = new byte[12];
+    int headerLength;
+    await using (var input = photo.OpenReadStream())
+    {
+        headerLength = await input.ReadAsync(header);
+    }
+
+    var validSignature = contentType switch
+    {
+        "image/jpeg" => headerLength >= 3 &&
+            header[0] == 0xFF && header[1] == 0xD8 && header[2] == 0xFF,
+        "image/png" => headerLength >= 8 &&
+            header[0] == 0x89 && header[1] == 0x50 && header[2] == 0x4E &&
+            header[3] == 0x47 && header[4] == 0x0D && header[5] == 0x0A &&
+            header[6] == 0x1A && header[7] == 0x0A,
+        "image/webp" => headerLength >= 12 &&
+            header[0] == 'R' && header[1] == 'I' && header[2] == 'F' && header[3] == 'F' &&
+            header[8] == 'W' && header[9] == 'E' && header[10] == 'B' && header[11] == 'P',
+        _ => false
+    };
+
+    if (!validSignature)
+    {
+        return Results.BadRequest(new { message = "That file does not appear to be a valid image." });
+    }
+
+    var uploadsDirectory = Path.Combine(
+        environment.WebRootPath ?? Path.Combine(environment.ContentRootPath, "wwwroot"),
+        "uploads");
+    Directory.CreateDirectory(uploadsDirectory);
+
+    var fileName = $"{Guid.NewGuid():N}{extension}";
+    var filePath = Path.Combine(uploadsDirectory, fileName);
+    await using (var output = File.Create(filePath))
+    {
+        await photo.CopyToAsync(output);
+    }
+
+    var report = new Report
+    {
+        CitizenId = citizenId,
+        Title = request.Title.Trim(),
+        Description = request.Description.Trim(),
+        Category = request.Category.Trim(),
+        AreaName = request.AreaName.Trim(),
+        Latitude = request.Latitude,
+        Longitude = request.Longitude,
+        PhotoPath = $"/uploads/{fileName}",
+        Status = "Submitted",
+        CreatedAtUtc = DateTime.UtcNow
+    };
+
+    report.StatusHistory.Add(new ReportStatusHistory
+    {
+        PreviousStatus = null,
+        NewStatus = report.Status,
+        Note = "Report submitted"
+    });
+
+    db.Reports.Add(report);
+    try
+    {
+        await db.SaveChangesAsync();
+    }
+    catch
+    {
+        File.Delete(filePath);
+        throw;
+    }
+
+    return Results.Created($"/api/reports/{report.Id}", report);
+})
+.RequireAuthorization(policy => policy.RequireRole("Citizen"))
+.WithMetadata(new RequestSizeLimitAttribute(6 * 1024 * 1024))
+.DisableAntiforgery();
 
 app.Run();
 

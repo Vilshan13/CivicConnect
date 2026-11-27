@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import './App.css'
 import AuthPanel from './AuthPanel'
 import LocationPicker from './LocationPicker'
@@ -21,6 +21,9 @@ function App() {
   const [message, setMessage] = useState('')
   const [error, setError] = useState('')
   const [session, setSession] = useState(null)
+  const [photoFile, setPhotoFile] = useState(null)
+  const [photoPreview, setPhotoPreview] = useState('')
+  const photoInputRef = useRef(null)
 
   const loadReports = useCallback(async () => {
   if (!session?.accessToken) return
@@ -44,9 +47,47 @@ function App() {
     .finally(() => setLoading(false))
 }, [loadReports, session?.accessToken])
 
+  useEffect(() => {
+    if (!photoFile) {
+      setPhotoPreview('')
+      return undefined
+    }
+
+    const previewUrl = URL.createObjectURL(photoFile)
+    setPhotoPreview(previewUrl)
+    return () => URL.revokeObjectURL(previewUrl)
+  }, [photoFile])
+
   function updateField(event) {
     const { name, value } = event.target
     setForm((current) => ({ ...current, [name]: value }))
+  }
+
+  function handlePhotoChange(event) {
+    const selectedFile = event.target.files?.[0] ?? null
+
+    if (!selectedFile) {
+      setPhotoFile(null)
+      return
+    }
+
+    const allowedTypes = ['image/jpeg', 'image/png', 'image/webp']
+    if (!allowedTypes.includes(selectedFile.type)) {
+      setPhotoFile(null)
+      event.target.value = ''
+      setError('Choose a JPG, PNG, or WebP image.')
+      return
+    }
+
+    if (selectedFile.size > 5 * 1024 * 1024) {
+      setPhotoFile(null)
+      event.target.value = ''
+      setError('The image must be 5 MB or smaller.')
+      return
+    }
+
+    setError('')
+    setPhotoFile(selectedFile)
   }
 
   async function submitReport(event) {
@@ -62,19 +103,39 @@ function App() {
     }
 
     try {
-      const response = await fetch('/api/reports', {
+      const headers = {
+        Authorization: `Bearer ${session.accessToken}`,
+      }
+      let requestBody = JSON.stringify(report)
+      let requestUrl = '/api/reports'
+
+      if (photoFile) {
+        const formData = new FormData()
+        Object.entries(report).forEach(([key, value]) => {
+          formData.append(key, String(value))
+        })
+        formData.append('photo', photoFile)
+        requestBody = formData
+        requestUrl = '/api/reports/with-photo'
+      } else {
+        headers['Content-Type'] = 'application/json'
+      }
+
+      const response = await fetch(requestUrl, {
         method: 'POST',
-        headers: {
-  'Content-Type': 'application/json',
-  Authorization: `Bearer ${session.accessToken}`,
-},
-        body: JSON.stringify(report),
+        headers,
+        body: requestBody,
       })
 
-      if (!response.ok) throw new Error('Could not submit this report. Please check the details.')
+      if (!response.ok) {
+        const responseData = await response.json().catch(() => null)
+        throw new Error(responseData?.message || 'Could not submit this report. Please check the details.')
+      }
 
       const createdReport = await response.json()
       setForm(emptyForm)
+      setPhotoFile(null)
+      if (photoInputRef.current) photoInputRef.current.value = ''
       setMessage(`Report #${createdReport.id} submitted successfully.`)
       await loadReports()
     } catch (submitError) {
@@ -183,6 +244,20 @@ function App() {
                 <span className="field-hint">Include useful details such as nearby landmarks.</span>
               </label>
 
+              <label className="photo-field">
+                Add a photo (optional)
+                <input
+                  ref={photoInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  onChange={handlePhotoChange}
+                />
+                <span className="field-hint">JPG, PNG, or WebP · up to 5 MB.</span>
+                {photoPreview && (
+                  <img className="photo-preview" src={photoPreview} alt="Selected report" />
+                )}
+              </label>
+
               <div className="location-heading">
                 <span className="location-icon" aria-hidden="true">⌖</span>
                 <div>
@@ -247,6 +322,9 @@ function App() {
                       <span className="category-tag">{report.category}</span>
                       <span className={`status-tag status-${report.status.toLowerCase().replaceAll(' ', '-')}`}>{report.status}</span>
                     </div>
+                    {report.photoPath && (
+                      <img className="report-photo" src={report.photoPath} alt={`Photo for ${report.title}`} loading="lazy" />
+                    )}
                     <h3>{report.title}</h3>
                     <p className="report-description">{report.description}</p>
                     <div className="report-meta">
